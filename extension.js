@@ -93,14 +93,15 @@ var AdBlocker = class AdBlocker {
 
 
 function init() {
-    adBlocker = new AdBlocker();
 }
 
 function enable() {
+    adBlocker = new AdBlocker();
     Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
 }
 
 function disable() {
     adBlocker.disable();
     Main.panel._rightBox.remove_child(adBlocker.button);
+    adBlocker = null;
 }
