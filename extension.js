@@ -66,6 +66,8 @@ var AdBlocker = class AdBlocker {
         let title = this.player.trackTitle.toLowerCase();
         if (title === 'unknown title') {
             this.reloadPlayer();
+            this.update();
+            return;
         }
 
         if (title === 'spotify' || title === 'advertisement') {
