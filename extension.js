@@ -47,15 +47,23 @@ var AdBlocker = class AdBlocker {
         }
     }
 
+    get stream() {
+        let mixer = Volume.getMixerControl();
+        try {
+            return mixer.get_sink_inputs().find(y => y.get_name() === 'spotify');
+        } catch(e) {
+            // spotify not found, return default
+            return mixer.get_default_sink();
+        }
+    }
+
     mute() {
-        let stream = Volume.getMixerControl().get_default_sink();
-        stream.change_is_muted(true);
+        this.stream.change_is_muted(true);
         this.button.set_child(this.ad_icon);
     }
 
     unmute() {
-        let stream = Volume.getMixerControl().get_default_sink();
-        stream.change_is_muted(false);
+        this.stream.change_is_muted(false);
         this.button.set_child(this.music_icon);
     }
 
