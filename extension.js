@@ -50,7 +50,7 @@ var AdBlocker = class AdBlocker {
     get stream() {
         let mixer = Volume.getMixerControl();
 
-        let spotify = mixer.get_sink_inputs().find(y => y.get_name() === 'spotify');
+        let spotify = mixer.get_sink_inputs().find(y => y.get_name().toLowerCase() === 'spotify');
         if (spotify)
             return spotify;
 
