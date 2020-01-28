@@ -49,12 +49,13 @@ var AdBlocker = class AdBlocker {
 
     get stream() {
         let mixer = Volume.getMixerControl();
-        try {
-            return mixer.get_sink_inputs().find(y => y.get_name() === 'spotify');
-        } catch(e) {
-            // spotify not found, return default
-            return mixer.get_default_sink();
-        }
+
+        let spotify = mixer.get_sink_inputs().find(y => y.get_name() === 'spotify');
+        if (spotify)
+            return spotify;
+
+        // spotify not found, return default
+        return mixer.get_default_sink();
     }
 
     mute() {
