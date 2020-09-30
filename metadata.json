@@ -1,1 +1,8 @@
-{"description": "Mute spotify ads", "uuid": "spotify-ad-block@danigm.net", "name": "Mute spotify ads", "shell-version": ["3.30", "3.32", "3.34", "3.36"]}
+{
+    "description": "Mute spotify ads",
+    "uuid": "spotify-ad-block@danigm.net",
+    "name": "Mute spotify ads",
+    "version": 1,
+    "url": "https://github.com/danigm/spotify-ad-blocker",
+    "shell-version": ["3.30", "3.32", "3.34", "3.36"]
+}
