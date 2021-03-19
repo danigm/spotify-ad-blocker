@@ -10,8 +10,8 @@ Or you can do it by hand, downloading this repository to your local shell extens
 
 ## How to use:
 
-A new icon will appear in the gnome bar. After open the spotify app you should
-click in the icon and it will be white. This extension will mute your output
+A new icon will appear in the gnome bar. After opening the spotify app you should
+click on the icon and it will be white. This extension will mute your output
 when spotify plays ads and unmute when the music comes back.
 
-The music icon will change to a tv icon when an ad is been played.
+The music icon will change to a tv icon when an ad is being played.
