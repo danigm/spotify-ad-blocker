@@ -82,9 +82,12 @@ var AdBlocker = class AdBlocker {
         } else {
         
         // Delay for 1 second to fix last second ad not muting
-        setTimeout(() => { 
+     // Delay for 1 second to fix last second ad not muting
+        
+          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
              this.unmute();
-        }, 1000);
+            return false;
+        });
        
         }
     }
