@@ -80,7 +80,10 @@ var AdBlocker = class AdBlocker {
         if (title === 'spotify' || title === 'advertisement') {
             this.mute();
         } else {
-            this.unmute();
+             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+             this.unmute();
+            return false;
+      			  });
         }
     }
 
