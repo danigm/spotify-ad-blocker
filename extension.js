@@ -80,7 +80,12 @@ var AdBlocker = class AdBlocker {
         if (title === 'spotify' || title === 'advertisement') {
             this.mute();
         } else {
-            this.unmute();
+        
+        // Delay for 1 second to fix last second ad not muting
+        setTimeout(() => { 
+             this.unmute();
+        }, 1000);
+       
         }
     }
 
