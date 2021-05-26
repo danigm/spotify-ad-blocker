@@ -69,8 +69,14 @@ var AdBlocker = class AdBlocker {
     }
 
     unmute() {
-        this.streams.map(s => s.change_is_muted(false));
         this.button.set_child(this.music_icon);
+        // Wait a bit to unmute, there's a delay before the next song
+        // starts
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500,
+            () => {
+                this.streams.map(s => s.change_is_muted(false));
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     update() {
