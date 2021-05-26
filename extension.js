@@ -7,6 +7,11 @@ const Volume = imports.ui.status.volume;
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
+const BLOCK_LIST = [
+    'spotify',
+    'advertisement',
+    '',
+];
 
 var AdBlocker = class AdBlocker {
     constructor() {
@@ -77,7 +82,7 @@ var AdBlocker = class AdBlocker {
             return;
         }
 
-        if (title === 'spotify' || title === 'advertisement') {
+        if (BLOCK_LIST.includes(title.trim())) {
             this.mute();
         } else {
             this.unmute();
