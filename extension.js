@@ -16,6 +16,8 @@ const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
     constructor() {
+        this.media = new Mpris.MediaSection();
+        this.player = null;
         this.playerWatchTimeoutId = 0;
         this.activated = false;
         this.playerId = 0;
@@ -41,7 +43,15 @@ var AdBlocker = class AdBlocker {
     }
 
     reloadPlayer() {
-        this.player = new Mpris.MprisPlayer(MPRIS_PLAYER);
+        if (this.playerId) {
+            this.player.disconnect(this.playerId);
+            this.playerId = 0;
+        }
+
+        this.player = this.media._players.get(MPRIS_PLAYER);
+        if (this.player) {
+            this.playerId = this.player.connect('changed', this.update.bind(this));
+        }
     }
 
     toggle() {
@@ -101,7 +111,6 @@ var AdBlocker = class AdBlocker {
         this.activated = true;
         this.button.opacity = 255;
         this.reloadPlayer();
-        this.playerId = this.player.connect('changed', this.update.bind(this));
         this.watch();
     }
 
@@ -112,6 +121,7 @@ var AdBlocker = class AdBlocker {
             this.player.disconnect(this.playerId);
         this.playerId = 0;
         this.stopWatch();
+        this.player = null;
     }
 
     watch() {
@@ -119,7 +129,7 @@ var AdBlocker = class AdBlocker {
             GLib.PRIORITY_DEFAULT,
             WATCH_TIMEOUT,
             () => {
-                if (!this.player._playerProxy) {
+                if (!this.player) {
                     this.reloadPlayer();
                 }
                 return GLib.SOURCE_CONTINUE;
