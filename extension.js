@@ -12,9 +12,11 @@ const BLOCK_LIST = [
     'advertisement',
     '',
 ];
+const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
     constructor() {
+        this.playerWatchTimeoutId = 0;
         this.activated = false;
         this.playerId = 0;
         this.button = new St.Bin({ style_class: 'panel-button',
@@ -94,6 +96,7 @@ var AdBlocker = class AdBlocker {
         this.button.opacity = 255;
         this.reloadPlayer();
         this.playerId = this.player.connect('changed', this.update.bind(this));
+        this.watch();
     }
 
     disable() {
@@ -102,6 +105,26 @@ var AdBlocker = class AdBlocker {
         if (this.playerId)
             this.player.disconnect(this.playerId);
         this.playerId = 0;
+        this.stopWatch();
+    }
+
+    watch() {
+        this.playerWatchTimeoutId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            WATCH_TIMEOUT,
+            () => {
+                if (!this.player._playerProxy) {
+                    this.reloadPlayer();
+                }
+                return GLib.SOURCE_CONTINUE;
+            });
+    }
+
+    stopWatch() {
+        if (this.playerWatchTimeoutId) {
+            GLib.source_remove(this.playerWatchTimeoutId);
+            this.playerWatchTimeoutId = 0;
+        }
     }
 }
 
