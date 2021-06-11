@@ -39,6 +39,8 @@ var AdBlocker = class AdBlocker {
         this.button.set_child(this.music_icon);
         this.button.connect('button-press-event', this.toggle.bind(this));
 
+        this.muted = false;
+        this.muteTimeout = 0;
         this.enable();
     }
 
@@ -74,17 +76,31 @@ var AdBlocker = class AdBlocker {
     }
 
     mute() {
-        this.streams.map(s => s.change_is_muted(true));
+        if (this.muted)
+            return;
+        this.muted = true;
+
+        if (this.muteTimeout) {
+            GLib.source_remove(this.muteTimeout);
+            this.muteTimeout = 0;
+        }
+
+        this.streams.map(s => s.change_is_muted(this.muted));
         this.button.set_child(this.ad_icon);
     }
 
     unmute() {
-        this.button.set_child(this.music_icon);
+        if (!this.muted)
+            return;
+        this.muted = false;
+
         // Wait a bit to unmute, there's a delay before the next song
         // starts
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500,
+        this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500,
             () => {
-                this.streams.map(s => s.change_is_muted(false));
+                this.muteTimeout = 0;
+                this.streams.map(s => s.change_is_muted(this.muted));
+                this.button.set_child(this.music_icon);
                 return GLib.SOURCE_REMOVE;
             });
     }
