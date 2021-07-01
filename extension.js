@@ -109,14 +109,15 @@ var AdBlocker = class AdBlocker {
         if (!this.activated)
             return;
 
-        let title = this.player.trackTitle.toLowerCase();
+        let title = this.player.trackTitle.toLowerCase().trim();
+        let artists = this.player.trackArtists.join(', ').toLowerCase().trim();
         if (title === 'unknown title') {
             this.reloadPlayer();
             this.update();
             return;
         }
 
-        if (BLOCK_LIST.includes(title.trim())) {
+        if (BLOCK_LIST.includes(title) || BLOCK_LIST.includes(artists)) {
             this.mute();
         } else {
             this.unmute();
