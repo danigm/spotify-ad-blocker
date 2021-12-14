@@ -7,11 +7,6 @@ const Volume = imports.ui.status.volume;
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
-const BLOCK_LIST = [
-    'spotify',
-    'advertisement',
-    '',
-];
 const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
@@ -105,19 +100,16 @@ var AdBlocker = class AdBlocker {
             });
     }
 
+    isAd() {
+        let trackId = this.player._playerProxy.Metadata['mpris:trackid'];
+        return trackId && trackId.unpack().startsWith('spotify:ad');
+    }
+
     update() {
         if (!this.activated)
             return;
 
-        let title = this.player.trackTitle.toLowerCase().trim();
-        let artists = this.player.trackArtists.join(', ').toLowerCase().trim();
-        if (title === 'unknown title') {
-            this.reloadPlayer();
-            this.update();
-            return;
-        }
-
-        if (BLOCK_LIST.includes(title) || BLOCK_LIST.includes(artists)) {
+        if (this.isAd()) {
             this.mute();
         } else {
             this.unmute();
