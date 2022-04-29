@@ -102,8 +102,17 @@ var AdBlocker = class AdBlocker {
     }
 
     isAd() {
+        const blocklist = [
+            'spotify:ad',
+            '/com/spotify/ad/',
+        ];
+
         let trackId = this.player._playerProxy.Metadata['mpris:trackid'];
-        return trackId && trackId.unpack().startsWith('spotify:ad');
+        if (!trackId)
+            return false
+
+        trackId = trackId.unpack();
+        return blocklist.some((b) => trackId.startsWith(b));
     }
 
     update() {
