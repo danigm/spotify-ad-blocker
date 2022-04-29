@@ -109,7 +109,7 @@ var AdBlocker = class AdBlocker {
 
         let trackId = this.player._playerProxy.Metadata['mpris:trackid'];
         if (!trackId)
-            return false
+            return false;
 
         trackId = trackId.unpack();
         return blocklist.some((b) => trackId.startsWith(b));
