@@ -138,6 +138,10 @@ var AdBlocker = class AdBlocker {
         this.button.opacity = 100;
         if (this.playerId)
             this.player.disconnect(this.playerId);
+        if (this.muteTimeout) {
+            GLib.source_remove(this.muteTimeout);
+            this.muteTimeout = 0;
+        }
         this.playerId = 0;
         this.stopWatch();
         this.player = null;
