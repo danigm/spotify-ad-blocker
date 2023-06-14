@@ -1,7 +1,9 @@
 const St = imports.gi.St;
 const Main = imports.ui.main;
+const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const Gvc = imports.gi.Gvc;
+const ExtensionUtils = imports.misc.extensionUtils;
 const Mpris = imports.ui.mpris;
 const Volume = imports.ui.status.volume;
 
@@ -12,6 +14,7 @@ const WATCH_TIMEOUT = 3000;
 var AdBlocker = class AdBlocker {
     constructor() {
         this.media = new Mpris.MediaSection();
+        this.settings = ExtensionUtils.getSettings();
         this.player = null;
         this.playerWatchTimeoutId = 0;
         this.activated = false;
@@ -37,6 +40,8 @@ var AdBlocker = class AdBlocker {
         this.muted = false;
         this.muteTimeout = 0;
         this.enable();
+
+        this.volumeBeforeAds = 0;
     }
 
     reloadPlayer() {
@@ -81,7 +86,13 @@ var AdBlocker = class AdBlocker {
             this.muteTimeout = 0;
         }
 
-        this.streams.map(s => s.change_is_muted(this.muted));
+        if (this.streams.length > 0) {
+            this.volumeBeforeAds = this.streams[0].get_volume();
+        }
+        this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
+        // This needs to be called after changing the volume for it to take effect
+        this.streams.map(s => s.push_volume());
+
         this.button.set_child(this.ad_icon);
     }
 
@@ -95,7 +106,12 @@ var AdBlocker = class AdBlocker {
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500,
             () => {
                 this.muteTimeout = 0;
-                this.streams.map(s => s.change_is_muted(this.muted));
+
+                if (this.volumeBeforeAds > 0) {
+                    this.streams.map(s => s.set_volume(this.volumeBeforeAds));
+                    this.streams.map(s => s.push_volume());
+                }
+
                 this.button.set_child(this.music_icon);
                 return GLib.SOURCE_REMOVE;
             });

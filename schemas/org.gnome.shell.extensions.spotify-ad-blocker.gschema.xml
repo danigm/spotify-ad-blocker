@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.spotify-ad-blocker"
+    path="/org/gnome/shell/extensions/spotify-ad-blocker/">
+    <key name="ad-volume-percentage" type="i">
+      <default>0</default>
+    </key>
+  </schema>
+</schemalist>
