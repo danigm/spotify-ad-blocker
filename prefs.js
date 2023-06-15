@@ -50,4 +50,18 @@ function fillPreferencesWindow(window) {
 
     adVolumeRow.add_suffix(adVolumeInput);
     adVolumeRow.set_activatable_widget(adVolumeInput);
+
+    const unmuteDelayRow = new Adw.ActionRow({
+        title: 'Volume restore delay',
+        subtitle: 'Delay in milliseconds before restoring volume after ads are finished playing',
+    });
+    prefsGroup.add(unmuteDelayRow);
+
+    const unmuteDelayInput = Gtk.SpinButton.new_with_range(0, 10000, 100);
+    unmuteDelayInput.set_valign(Gtk.Align.CENTER);
+    settings.bind('unmute-delay', unmuteDelayInput, 'value',
+        Gio.SettingsBindFlags.DEFAULT)
+
+    unmuteDelayRow.add_suffix(unmuteDelayInput);
+    unmuteDelayRow.set_activatable_widget(unmuteDelayInput);
 }
