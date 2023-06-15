@@ -13,29 +13,6 @@ function init(meta) {
 }
 
 /**
- * This function is called when the preferences window is first created to build
- * and return a GTK widget.
- *
- * As of GNOME 42, the preferences window will be a `Adw.PreferencesWindow`. The
- * widget returned by this function will be added to an `Adw.PreferencesPage` or
- * `Adw.PreferencesGroup` if necessary.
- *
- * @returns {Gtk.Widget} the preferences widget
- */
-function buildPrefsWidget() {
-    // This may be any GtkWidget, although usually you would choose a container
-    // container like a GtkBox, GtkGrid or GtkNotebook
-    const prefsWidget = new Gtk.Box();
-
-    // Add a widget to the container, usually a preference row such as
-    // AdwActionRow, AdwComboRow or AdwRevealerRow
-    const label = new Gtk.Label({ label: `${Me.metadata.name}` });
-    prefsWidget.append(label);
-
-    return prefsWidget;
-}
-
-/**
  * This function is called when the preferences window is first created to fill
  * the `Adw.PreferencesWindow`.
  *

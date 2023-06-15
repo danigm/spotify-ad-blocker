@@ -2,8 +2,8 @@
     "description": "Mute spotify ads",
     "uuid": "spotify-ad-block@danigm.net",
     "name": "Mute spotify ads",
-    "version": 2,
+    "version": 3,
     "url": "https://github.com/danigm/spotify-ad-blocker",
-    "shell-version": ["3.38", "40", "41", "42", "43", "44"],
+    "shell-version": ["42", "43", "44"],
     "settings-schema": "org.gnome.shell.extensions.spotify-ad-blocker"
 }
