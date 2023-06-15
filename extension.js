@@ -103,7 +103,7 @@ var AdBlocker = class AdBlocker {
 
         // Wait a bit to unmute, there's a delay before the next song
         // starts
-        this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500,
+        this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
             () => {
                 this.muteTimeout = 0;
 

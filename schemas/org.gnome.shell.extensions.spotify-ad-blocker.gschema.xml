@@ -5,5 +5,8 @@
     <key name="ad-volume-percentage" type="i">
       <default>0</default>
     </key>
+    <key name="unmute-delay" type="i">
+      <default>500</default>
+    </key>
   </schema>
 </schemalist>
