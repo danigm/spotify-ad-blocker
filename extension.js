@@ -42,6 +42,14 @@ var AdBlocker = class AdBlocker {
         this.enable();
 
         this.volumeBeforeAds = [];
+
+        this.settings.connect('changed::show-indicator', () => {
+            if (this.settings.get_boolean('show-indicator')) {
+                Main.panel._rightBox.insert_child_at_index(this.button, 0);
+            } else {
+                Main.panel._rightBox.remove_child(this.button);
+            }
+        });
     }
 
     reloadPlayer() {
@@ -189,7 +197,9 @@ function init() {
 
 function enable() {
     adBlocker = new AdBlocker();
-    Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
+    if (adBlocker.settings.get_boolean('show-indicator')) {
+        Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
+    }
 }
 
 function disable() {

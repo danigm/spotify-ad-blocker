@@ -22,6 +22,8 @@ function init(meta) {
  * @param {Adw.PreferencesWindow} window - The preferences window
  */
 function fillPreferencesWindow(window) {
+    const settings = ExtensionUtils.getSettings();
+
     const prefsPage = new Adw.PreferencesPage({
         name: 'general',
         title: 'General',
@@ -34,13 +36,27 @@ function fillPreferencesWindow(window) {
     });
     prefsPage.add(prefsGroup);
 
+    const showIndicatorRow = new Adw.ActionRow({
+        title: 'Show indicator',
+        subtitle: 'Whether to show the panel indicator',
+    });
+    prefsGroup.add(showIndicatorRow);
+
+    const showIndicatorSwitch = new Gtk.Switch({
+        active: settings.get_boolean('show-indicator'),
+        valign: Gtk.Align.CENTER,
+    });
+    settings.bind('show-indicator', showIndicatorSwitch, 'active',
+        Gio.SettingsBindFlags.DEFAULT);
+
+    showIndicatorRow.add_suffix(showIndicatorSwitch);
+    showIndicatorRow.set_activatable_widget(showIndicatorSwitch);
+
     const adVolumeRow = new Adw.ActionRow({
         title: 'Volume percentage for ads',
         subtitle: 'Volume percentage to use when ads are playing',
     });
     prefsGroup.add(adVolumeRow);
-
-    const settings = ExtensionUtils.getSettings();
 
     const adVolumeInput = Gtk.SpinButton.new_with_range(0, 100, 1);
     // Without this, the number input expands to fill all the vertical space
