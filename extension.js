@@ -176,7 +176,7 @@ var AdBlocker = class AdBlocker {
             GLib.PRIORITY_DEFAULT,
             WATCH_TIMEOUT,
             () => {
-                if (!this.player) {
+                if (!this.player || !this.player._playerProxy) {
                     this.reloadPlayer();
                 }
                 return GLib.SOURCE_CONTINUE;
