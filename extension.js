@@ -41,7 +41,7 @@ var AdBlocker = class AdBlocker {
         this.muteTimeout = 0;
         this.enable();
 
-        this.volumeBeforeAds = [];
+        this.volumeBeforeAds = 0;
 
         this.settings.connect('changed::show-indicator', () => {
             if (this.settings.get_boolean('show-indicator')) {
@@ -94,12 +94,12 @@ var AdBlocker = class AdBlocker {
             this.muteTimeout = 0;
         }
 
-        for (const stream of this.streams) {
-            this.volumeBeforeAds.push(stream.get_volume());
-            stream.set_volume(stream.get_volume() * this.settings.get_int('ad-volume-percentage') / 100);
-            // This needs to be called after changing the volume for it to take effect
-            stream.push_volume();
+        if (this.streams.length > 0) {
+            this.volumeBeforeAds = this.streams[0].get_volume();
         }
+        this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
+        // This needs to be called after changing the volume for it to take effect
+        this.streams.map(s => s.push_volume());
 
         this.button.set_child(this.ad_icon);
     }
@@ -119,9 +119,9 @@ var AdBlocker = class AdBlocker {
     unmute() {
         this.muteTimeout = 0;
 
-        for (const stream of this.streams) {
-            stream.set_volume(this.volumeBeforeAds.shift());
-            stream.push_volume();
+        if (this.volumeBeforeAds > 0) {
+            this.streams.map(s => s.set_volume(this.volumeBeforeAds));
+            this.streams.map(s => s.push_volume());
         }
 
         this.button.set_child(this.music_icon);
