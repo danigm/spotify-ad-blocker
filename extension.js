@@ -104,7 +104,7 @@ var AdBlocker = class AdBlocker {
         this.button.set_child(this.ad_icon);
     }
 
-    unmuteAfterDelay() {
+    unmute() {
         if (!this.muted)
             return;
         this.muted = false;
@@ -112,20 +112,17 @@ var AdBlocker = class AdBlocker {
         // Wait a bit to unmute, there's a delay before the next song
         // starts
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
-            // The arrow function is necessary so unmuteNow can use "this"
-            () => this.unmute());
-    }
+            () => {
+                this.muteTimeout = 0;
 
-    unmute() {
-        this.muteTimeout = 0;
+                if (this.volumeBeforeAds > 0) {
+                    this.streams.map(s => s.set_volume(this.volumeBeforeAds));
+                    this.streams.map(s => s.push_volume());
+                }
 
-        if (this.volumeBeforeAds > 0) {
-            this.streams.map(s => s.set_volume(this.volumeBeforeAds));
-            this.streams.map(s => s.push_volume());
-        }
-
-        this.button.set_child(this.music_icon);
-        return GLib.SOURCE_REMOVE;
+                this.button.set_child(this.music_icon);
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     isAd() {
@@ -149,7 +146,7 @@ var AdBlocker = class AdBlocker {
         if (this.isAd()) {
             this.mute();
         } else {
-            this.unmuteAfterDelay();
+            this.unmute();
         }
     }
 
@@ -163,8 +160,6 @@ var AdBlocker = class AdBlocker {
     disable() {
         this.activated = false;
         this.button.opacity = 100;
-        if (this.muted)
-            this.unmute();
         if (this.playerId)
             this.player.disconnect(this.playerId);
         if (this.muteTimeout) {
