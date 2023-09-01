@@ -41,7 +41,7 @@ var AdBlocker = class AdBlocker {
         this.muteTimeout = 0;
         this.enable();
 
-        this.volumeBeforeAds = NOT_MUTED;
+        this.volumeBeforeAds = this.settings.get_int('volume-before-ads');
 
         this.settings.connect('changed::show-indicator', () => {
             if (this.settings.get_boolean('show-indicator')) {
@@ -169,6 +169,7 @@ var AdBlocker = class AdBlocker {
             GLib.source_remove(this.muteTimeout);
             this.muteTimeout = 0;
         }
+        this.settings.set_int('volume-before-ads', this.volumeBeforeAds);
         this.playerId = 0;
         this.stopWatch();
         this.player = null;
