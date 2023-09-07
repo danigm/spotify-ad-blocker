@@ -84,8 +84,8 @@ var AdBlocker = class AdBlocker {
         if (spotify.length)
             return spotify;
 
-        // spotify not found, return default
-        return [mixer.get_default_sink()];
+        // spotify not found
+        return [];
     }
 
     mute() {
@@ -99,10 +99,10 @@ var AdBlocker = class AdBlocker {
 
         if (this.streams.length > 0) {
             this.volumeBeforeAds = this.streams[0].get_volume();
+            this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
+            // This needs to be called after changing the volume for it to take effect
+            this.streams.map(s => s.push_volume());
         }
-        this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
-        // This needs to be called after changing the volume for it to take effect
-        this.streams.map(s => s.push_volume());
 
         this.button.set_child(this.ad_icon);
     }
@@ -117,7 +117,7 @@ var AdBlocker = class AdBlocker {
             () => {
                 this.muteTimeout = 0;
 
-                if (this.muted) {
+                if (this.muted && this.streams.length > 0) {
                     this.streams.map(s => s.set_volume(this.volumeBeforeAds));
                     this.streams.map(s => s.push_volume());
                     this.volumeBeforeAds = NOT_MUTED;
