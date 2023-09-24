@@ -1,20 +1,21 @@
-const St = imports.gi.St;
-const Main = imports.ui.main;
-const Gio = imports.gi.Gio;
-const GLib = imports.gi.GLib;
-const Gvc = imports.gi.Gvc;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Mpris = imports.ui.mpris;
-const Volume = imports.ui.status.volume;
+import St from 'gi://St';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Gvc from 'gi://Gvc';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Mpris from 'resource:///org/gnome/shell/ui/mpris.js';
+import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
 const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
-    constructor() {
+    constructor(settings) {
         this.media = new Mpris.MediaSection();
-        this.settings = ExtensionUtils.getSettings();
+        this.settings = settings;
         this.player = null;
         this.playerWatchTimeoutId = 0;
         this.activated = false;
@@ -197,18 +198,18 @@ var AdBlocker = class AdBlocker {
 }
 
 
-function init() {
-}
-
-function enable() {
-    adBlocker = new AdBlocker();
-    if (adBlocker.settings.get_boolean('show-indicator')) {
-        Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
+export default class SpoitifyAdBlockExtension extends Extension {
+    enable() {
+        let settings = this.getSettings();
+        adBlocker = new AdBlocker(settings);
+        if (adBlocker.settings.get_boolean('show-indicator')) {
+            Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
+        }
     }
-}
 
-function disable() {
-    adBlocker.disable();
-    Main.panel._rightBox.remove_child(adBlocker.button);
-    adBlocker = null;
+    disable() {
+        adBlocker.disable();
+        Main.panel._rightBox.remove_child(adBlocker.button);
+        adBlocker = null;
+    }
 }
