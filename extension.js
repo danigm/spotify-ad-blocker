@@ -61,6 +61,8 @@ var AdBlocker = class AdBlocker {
 
         this.player = this.media._players.get(MPRIS_PLAYER);
         if (this.player) {
+            // Update right away in case the 'changed' signal has already been emitted
+            this.update();
             this.playerId = this.player.connect('changed', this.update.bind(this));
         }
     }
