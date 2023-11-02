@@ -10,6 +10,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
+const NOT_MUTED = -1;
 const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
@@ -38,11 +39,8 @@ var AdBlocker = class AdBlocker {
         this.button.set_child(this.music_icon);
         this.button.connect('button-press-event', this.toggle.bind(this));
 
-        this.muted = false;
         this.muteTimeout = 0;
         this.enable();
-
-        this.volumeBeforeAds = 0;
 
         this.settings.connect('changed::show-indicator', () => {
             if (this.settings.get_boolean('show-indicator')) {
@@ -75,6 +73,10 @@ var AdBlocker = class AdBlocker {
         }
     }
 
+    get muted() {
+        return this.volumeBeforeAds !== NOT_MUTED;
+    }
+
     get streams() {
         let mixer = Volume.getMixerControl();
 
@@ -83,14 +85,21 @@ var AdBlocker = class AdBlocker {
         if (spotify.length)
             return spotify;
 
-        // spotify not found, return default
-        return [mixer.get_default_sink()];
+        // spotify not found
+        return [];
+    }
+
+    get volumeBeforeAds() {
+        return this.settings.get_int('volume-before-ads');
+    }
+
+    set volumeBeforeAds(newVolume) {
+        this.settings.set_int('volume-before-ads', newVolume);
     }
 
     mute() {
         if (this.muted)
             return;
-        this.muted = true;
 
         if (this.muteTimeout) {
             GLib.source_remove(this.muteTimeout);
@@ -99,36 +108,33 @@ var AdBlocker = class AdBlocker {
 
         if (this.streams.length > 0) {
             this.volumeBeforeAds = this.streams[0].get_volume();
+            this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
+            // This needs to be called after changing the volume for it to take effect
+            this.streams.map(s => s.push_volume());
         }
-        this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
-        // This needs to be called after changing the volume for it to take effect
-        this.streams.map(s => s.push_volume());
 
         this.button.set_child(this.ad_icon);
     }
 
-    unmuteAfterDelay() {
+    unmute() {
         if (!this.muted)
             return;
-        this.muted = false;
 
         // Wait a bit to unmute, there's a delay before the next song
         // starts
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
-            // The arrow function is necessary so unmuteNow can use "this"
-            () => this.unmute());
-    }
+            () => {
+                this.muteTimeout = 0;
 
-    unmute() {
-        this.muteTimeout = 0;
+                if (this.muted && this.streams.length > 0) {
+                    this.streams.map(s => s.set_volume(this.volumeBeforeAds));
+                    this.streams.map(s => s.push_volume());
+                    this.volumeBeforeAds = NOT_MUTED;
+                }
 
-        if (this.volumeBeforeAds > 0) {
-            this.streams.map(s => s.set_volume(this.volumeBeforeAds));
-            this.streams.map(s => s.push_volume());
-        }
-
-        this.button.set_child(this.music_icon);
-        return GLib.SOURCE_REMOVE;
+                this.button.set_child(this.music_icon);
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     isAd() {
@@ -152,7 +158,7 @@ var AdBlocker = class AdBlocker {
         if (this.isAd()) {
             this.mute();
         } else {
-            this.unmuteAfterDelay();
+            this.unmute();
         }
     }
 
@@ -166,8 +172,6 @@ var AdBlocker = class AdBlocker {
     disable() {
         this.activated = false;
         this.button.opacity = 100;
-        if (this.muted)
-            this.unmute();
         if (this.playerId)
             this.player.disconnect(this.playerId);
         if (this.muteTimeout) {
