@@ -15,7 +15,13 @@ const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
     constructor(settings) {
-        this.media = new Mpris.MediaSection();
+        // GNOME 48
+        if (Mpris.MediaSection == undefined) {
+            this.media = new Mpris.MprisSource();
+        } else {
+            this.media = new Mpris.MediaSection();
+        }
+
         this.settings = settings;
         this.player = null;
         this.playerWatchTimeoutId = 0;
