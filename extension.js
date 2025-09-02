@@ -13,6 +13,9 @@ const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
 const NOT_MUTED = -1;
 const WATCH_TIMEOUT = 3000;
 
+// This is supposed to be 65536 but for some reason sometimes the stream maxes out at 65535
+const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm() - 1;
+
 var AdBlocker = class AdBlocker {
     constructor(settings) {
         // GNOME 48
@@ -27,6 +30,10 @@ var AdBlocker = class AdBlocker {
         this.playerWatchTimeoutId = 0;
         this.activated = false;
         this.playerId = 0;
+        this.streamAddedHandlerId = 0;
+        this.streamRemovedHandlerId = 0;
+        this.streamVolumeHandlers = new Map();
+
         this.button = new St.Bin({ style_class: 'panel-button',
                                    reactive: true,
                                    can_focus: true,
@@ -104,9 +111,6 @@ var AdBlocker = class AdBlocker {
     }
 
     mute() {
-        if (this.muted)
-            return;
-
         if (this.muteTimeout) {
             GLib.source_remove(this.muteTimeout);
             this.muteTimeout = 0;
@@ -123,9 +127,6 @@ var AdBlocker = class AdBlocker {
     }
 
     unmute() {
-        if (!this.muted)
-            return;
-
         // Wait a bit to unmute, there's a delay before the next song
         // starts
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
@@ -162,9 +163,13 @@ var AdBlocker = class AdBlocker {
             return;
 
         if (this.isAd()) {
-            this.mute();
+            if (!this.muted) {
+                this.mute();
+            }
         } else {
-            this.unmute();
+            if (this.muted) {
+                this.unmute();
+            }
         }
     }
 
@@ -173,11 +178,13 @@ var AdBlocker = class AdBlocker {
         this.button.opacity = 255;
         this.reloadPlayer();
         this.watch();
+        this.connectStreamHandlers();
     }
 
     disable() {
         this.activated = false;
         this.button.opacity = 100;
+        this.disconnectStreamHandlers();
         if (this.playerId)
             this.player.disconnect(this.playerId);
         if (this.muteTimeout) {
@@ -205,6 +212,66 @@ var AdBlocker = class AdBlocker {
         if (this.playerWatchTimeoutId) {
             GLib.source_remove(this.playerWatchTimeoutId);
             this.playerWatchTimeoutId = 0;
+        }
+    }
+
+    connectStreamHandlers() {
+        this.streams.forEach(stream => this.connectStreamVolumeHandler(stream));
+
+        const mixer = Volume.getMixerControl();
+        this.streamAddedHandlerId = mixer.connect('stream-added', (control, streamId) => {
+            const stream = control.lookup_stream_id(streamId);
+            const streamName = stream.get_name();
+            if (streamName.toLowerCase() === 'spotify') {
+                this.connectStreamVolumeHandler(stream);
+            }
+        });
+
+        this.streamRemovedHandlerId = mixer.connect('stream-removed', (control, streamId) => {
+            if (this.streamVolumeHandlers.has(streamId)) {
+                const stream = control.lookup_stream_id(streamId);
+                const handlerId = this.streamVolumeHandlers.get(streamId);
+                if (stream && handlerId) {
+                    stream.disconnect(handlerId);
+                }
+                this.streamVolumeHandlers.delete(streamId);
+            }
+        });
+    }
+
+    connectStreamVolumeHandler(stream) {
+        const streamId = stream.get_id();
+        if (!this.streamVolumeHandlers.has(streamId)) {
+            const handlerId = stream.connect('notify::volume', stream => {
+                // Spotify may set the stream volume to 100% when an ad is playing after
+                // we've already muted and we may need to mute again
+                if (
+                    this.isAd() &&
+                    this.muted &&
+                    stream.get_volume() >= MAX_STREAM_VOLUME
+                ) {
+                    this.mute();
+                }
+            });
+            this.streamVolumeHandlers.set(streamId, handlerId);
+        }
+    }
+
+    disconnectStreamHandlers() {
+        const mixer = Volume.getMixerControl();
+        for (const [streamId, handlerId] of this.streamVolumeHandlers.entries()) {
+            const stream = mixer.lookup_stream_id(Number(streamId));
+            if (stream && handlerId) {
+                stream.disconnect(handlerId);
+            }
+        }
+        this.streamVolumeHandlers.clear();
+
+        if (this.streamAddedHandlerId) {
+            mixer.disconnect(this.streamAddedHandlerId);
+        }
+        if (this.streamRemovedHandlerId) {
+            mixer.disconnect(this.streamRemovedHandlerId);
         }
     }
 }
