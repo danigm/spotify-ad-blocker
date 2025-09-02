@@ -13,8 +13,7 @@ const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
 const NOT_MUTED = -1;
 const WATCH_TIMEOUT = 3000;
 
-// This is supposed to be 65536 but for some reason sometimes the stream maxes out at 65535
-const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm() - 1;
+const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
 
 var AdBlocker = class AdBlocker {
     constructor(settings) {
@@ -215,6 +214,14 @@ var AdBlocker = class AdBlocker {
         }
     }
 
+    shouldMuteStream(stream) {
+        return this.isAd() &&
+            this.muted &&
+            // MAX_STREAM_VOLUME is 65536 but for some reason sometimes the stream volume
+            // is 65535 when set to full volume
+            stream.get_volume() >= MAX_STREAM_VOLUME - 1;
+    }
+
     connectStreamHandlers() {
         this.streams.forEach(stream => this.connectStreamVolumeHandler(stream));
 
@@ -223,6 +230,11 @@ var AdBlocker = class AdBlocker {
             const stream = control.lookup_stream_id(streamId);
             const streamName = stream.get_name();
             if (streamName.toLowerCase() === 'spotify') {
+                // A new stream could be created during an ad so we should check right
+                // away whether it needs to be muted
+                if (this.shouldMuteStream(stream)) {
+                    this.mute();
+                }
                 this.connectStreamVolumeHandler(stream);
             }
         });
@@ -243,13 +255,9 @@ var AdBlocker = class AdBlocker {
         const streamId = stream.get_id();
         if (!this.streamVolumeHandlers.has(streamId)) {
             const handlerId = stream.connect('notify::volume', stream => {
-                // Spotify may set the stream volume to 100% when an ad is playing after
+                // Spotify may set the stream to full volume when an ad is playing after
                 // we've already muted and we may need to mute again
-                if (
-                    this.isAd() &&
-                    this.muted &&
-                    stream.get_volume() >= MAX_STREAM_VOLUME
-                ) {
+                if (this.shouldMuteStream(stream)) {
                     this.mute();
                 }
             });
@@ -269,9 +277,11 @@ var AdBlocker = class AdBlocker {
 
         if (this.streamAddedHandlerId) {
             mixer.disconnect(this.streamAddedHandlerId);
+            this.streamAddedHandlerId = 0;
         }
         if (this.streamRemovedHandlerId) {
             mixer.disconnect(this.streamRemovedHandlerId);
+            this.streamRemovedHandlerId = 0;
         }
     }
 }
