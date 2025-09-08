@@ -10,7 +10,6 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
-const NOT_MUTED = -1;
 const WATCH_TIMEOUT = 3000;
 
 const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
@@ -86,7 +85,9 @@ var AdBlocker = class AdBlocker {
     }
 
     get muted() {
-        return this.volumeBeforeAds !== NOT_MUTED;
+        // Subtract 1 from MAX_STREAM_VOLUME because it's 65536 but for some reason
+        // sometimes the stream volume is 65535 when set to full volume
+        return this.streams.every(s => s.get_volume() < MAX_STREAM_VOLUME - 1);
     }
 
     get streams() {
@@ -101,14 +102,6 @@ var AdBlocker = class AdBlocker {
         return [];
     }
 
-    get volumeBeforeAds() {
-        return this.settings.get_int('volume-before-ads');
-    }
-
-    set volumeBeforeAds(newVolume) {
-        this.settings.set_int('volume-before-ads', newVolume);
-    }
-
     mute() {
         if (this.muteTimeout) {
             GLib.source_remove(this.muteTimeout);
@@ -116,10 +109,9 @@ var AdBlocker = class AdBlocker {
         }
 
         if (this.streams.length > 0) {
-            this.volumeBeforeAds = this.streams[0].get_volume();
-            this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
+            this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
             // This needs to be called after changing the volume for it to take effect
-            this.streams.map(s => s.push_volume());
+            this.streams.forEach(s => s.push_volume());
         }
 
         this.button.set_child(this.ad_icon);
@@ -133,9 +125,8 @@ var AdBlocker = class AdBlocker {
                 this.muteTimeout = 0;
 
                 if (this.muted && this.streams.length > 0) {
-                    this.streams.map(s => s.set_volume(this.volumeBeforeAds));
-                    this.streams.map(s => s.push_volume());
-                    this.volumeBeforeAds = NOT_MUTED;
+                    this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
+                    this.streams.forEach(s => s.push_volume());
                 }
 
                 this.button.set_child(this.music_icon);
@@ -214,12 +205,8 @@ var AdBlocker = class AdBlocker {
         }
     }
 
-    shouldMuteStream(stream) {
-        return this.isAd() &&
-            this.muted &&
-            // MAX_STREAM_VOLUME is 65536 but for some reason sometimes the stream volume
-            // is 65535 when set to full volume
-            stream.get_volume() >= MAX_STREAM_VOLUME - 1;
+    shouldMute() {
+        return this.isAd() && !this.muted;
     }
 
     connectStreamHandlers() {
@@ -232,7 +219,7 @@ var AdBlocker = class AdBlocker {
             if (streamName.toLowerCase() === 'spotify') {
                 // A new stream could be created during an ad so we should check right
                 // away whether it needs to be muted
-                if (this.shouldMuteStream(stream)) {
+                if (this.shouldMute()) {
                     this.mute();
                 }
                 this.connectStreamVolumeHandler(stream);
@@ -257,7 +244,7 @@ var AdBlocker = class AdBlocker {
             const handlerId = stream.connect('notify::volume', stream => {
                 // Spotify may set the stream to full volume when an ad is playing after
                 // we've already muted and we may need to mute again
-                if (this.shouldMuteStream(stream)) {
+                if (this.shouldMute()) {
                     this.mute();
                 }
             });
