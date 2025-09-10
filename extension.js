@@ -102,6 +102,10 @@ var AdBlocker = class AdBlocker {
         return [];
     }
 
+    shouldMute() {
+        return this.isAd() && !this.muted;
+    }
+
     mute() {
         if (this.muteTimeout) {
             GLib.source_remove(this.muteTimeout);
@@ -117,14 +121,23 @@ var AdBlocker = class AdBlocker {
         this.button.set_child(this.ad_icon);
     }
 
+    shouldUnmute() {
+        return !this.isAd() && this.muted;
+    }
+
     unmute() {
-        // Wait a bit to unmute, there's a delay before the next song
-        // starts
+        // Don't schedule more than one unmute
+        if (this.muteTimeout) {
+            return;
+        }
+
+        // Wait a bit to unmute, there's a delay before the next song starts
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
             () => {
                 this.muteTimeout = 0;
 
-                if (this.muted && this.streams.length > 0) {
+                // Always double-check before unmuting since this is delayed
+                if (this.shouldUnmute() && this.streams.length > 0) {
                     this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
                     this.streams.forEach(s => s.push_volume());
                 }
@@ -152,14 +165,10 @@ var AdBlocker = class AdBlocker {
         if (!this.activated)
             return;
 
-        if (this.isAd()) {
-            if (!this.muted) {
-                this.mute();
-            }
-        } else {
-            if (this.muted) {
-                this.unmute();
-            }
+        if (this.shouldMute()) {
+            this.mute();
+        } else if (this.shouldUnmute()) {
+            this.unmute();
         }
     }
 
@@ -205,10 +214,6 @@ var AdBlocker = class AdBlocker {
         }
     }
 
-    shouldMute() {
-        return this.isAd() && !this.muted;
-    }
-
     connectStreamHandlers() {
         this.streams.forEach(stream => this.connectStreamVolumeHandler(stream));
 
@@ -219,9 +224,7 @@ var AdBlocker = class AdBlocker {
             if (streamName.toLowerCase() === 'spotify') {
                 // A new stream could be created during an ad so we should check right
                 // away whether it needs to be muted
-                if (this.shouldMute()) {
-                    this.mute();
-                }
+                this.update();
                 this.connectStreamVolumeHandler(stream);
             }
         });
@@ -242,11 +245,9 @@ var AdBlocker = class AdBlocker {
         const streamId = stream.get_id();
         if (!this.streamVolumeHandlers.has(streamId)) {
             const handlerId = stream.connect('notify::volume', stream => {
-                // Spotify may set the stream to full volume when an ad is playing after
-                // we've already muted and we may need to mute again
-                if (this.shouldMute()) {
-                    this.mute();
-                }
+                // Spotify may change the stream volume so we should check whether the
+                // stream volume needs to be muted or unmuted if this happens
+                this.update();
             });
             this.streamVolumeHandlers.set(streamId, handlerId);
         }
