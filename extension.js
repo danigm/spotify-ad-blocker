@@ -85,6 +85,10 @@ var AdBlocker = class AdBlocker {
     }
 
     get muted() {
+        if (this.streams.length === 0) {
+            return false;
+        }
+
         // Subtract 1 from MAX_STREAM_VOLUME because it's 65536 but for some reason
         // sometimes the stream volume is 65535 when set to full volume
         return this.streams.every(s => s.get_volume() < MAX_STREAM_VOLUME - 1);
@@ -112,11 +116,9 @@ var AdBlocker = class AdBlocker {
             this.muteTimeout = 0;
         }
 
-        if (this.streams.length > 0) {
-            this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
-            // This needs to be called after changing the volume for it to take effect
-            this.streams.forEach(s => s.push_volume());
-        }
+        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
+        // This needs to be called after changing the volume for it to take effect
+        this.streams.forEach(s => s.push_volume());
 
         this.button.set_child(this.ad_icon);
     }
@@ -125,7 +127,7 @@ var AdBlocker = class AdBlocker {
         return !this.isAd() && this.muted;
     }
 
-    unmute() {
+    unmuteAfterDelay() {
         // Don't schedule more than one unmute
         if (this.muteTimeout) {
             return;
@@ -137,14 +139,19 @@ var AdBlocker = class AdBlocker {
                 this.muteTimeout = 0;
 
                 // Always double-check before unmuting since this is delayed
-                if (this.shouldUnmute() && this.streams.length > 0) {
-                    this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
-                    this.streams.forEach(s => s.push_volume());
+                if (this.shouldUnmute()) {
+                    this.unmute();
                 }
 
-                this.button.set_child(this.music_icon);
                 return GLib.SOURCE_REMOVE;
             });
+    }
+
+    unmute() {
+        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
+        this.streams.forEach(s => s.push_volume());
+
+        this.button.set_child(this.music_icon);
     }
 
     isAd() {
@@ -161,14 +168,19 @@ var AdBlocker = class AdBlocker {
         return blocklist.some((b) => trackId.startsWith(b));
     }
 
-    update() {
+    update(didVolumeChange = false) {
         if (!this.activated)
             return;
 
         if (this.shouldMute()) {
             this.mute();
         } else if (this.shouldUnmute()) {
-            this.unmute();
+            if (didVolumeChange) {
+                // Don't delay unmuting if it's because of a volume change
+                this.unmute();
+            } else {
+                this.unmuteAfterDelay();
+            }
         }
     }
 
