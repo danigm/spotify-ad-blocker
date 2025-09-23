@@ -10,8 +10,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
-const NOT_MUTED = -1;
 const WATCH_TIMEOUT = 3000;
+
+const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
 
 var AdBlocker = class AdBlocker {
     constructor(settings) {
@@ -27,6 +28,10 @@ var AdBlocker = class AdBlocker {
         this.playerWatchTimeoutId = 0;
         this.activated = false;
         this.playerId = 0;
+        this.streamAddedHandlerId = 0;
+        this.streamRemovedHandlerId = 0;
+        this.streamVolumeHandlers = new Map();
+
         this.button = new St.Bin({ style_class: 'panel-button',
                                    reactive: true,
                                    can_focus: true,
@@ -80,7 +85,13 @@ var AdBlocker = class AdBlocker {
     }
 
     get muted() {
-        return this.volumeBeforeAds !== NOT_MUTED;
+        if (this.streams.length === 0) {
+            return false;
+        }
+
+        // Subtract 1 from MAX_STREAM_VOLUME because it's 65536 but for some reason
+        // sometimes the stream volume is 65535 when set to full volume
+        return this.streams.every(s => s.get_volume() < MAX_STREAM_VOLUME - 1);
     }
 
     get streams() {
@@ -95,52 +106,52 @@ var AdBlocker = class AdBlocker {
         return [];
     }
 
-    get volumeBeforeAds() {
-        return this.settings.get_int('volume-before-ads');
-    }
-
-    set volumeBeforeAds(newVolume) {
-        this.settings.set_int('volume-before-ads', newVolume);
+    shouldMute() {
+        return this.isAd() && !this.muted;
     }
 
     mute() {
-        if (this.muted)
-            return;
-
         if (this.muteTimeout) {
             GLib.source_remove(this.muteTimeout);
             this.muteTimeout = 0;
         }
 
-        if (this.streams.length > 0) {
-            this.volumeBeforeAds = this.streams[0].get_volume();
-            this.streams.map(s => s.set_volume(this.volumeBeforeAds * this.settings.get_int('ad-volume-percentage') / 100));
-            // This needs to be called after changing the volume for it to take effect
-            this.streams.map(s => s.push_volume());
-        }
+        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
+        // This needs to be called after changing the volume for it to take effect
+        this.streams.forEach(s => s.push_volume());
 
         this.button.set_child(this.ad_icon);
     }
 
-    unmute() {
-        if (!this.muted)
-            return;
+    shouldUnmute() {
+        return !this.isAd() && this.muted;
+    }
 
-        // Wait a bit to unmute, there's a delay before the next song
-        // starts
+    unmuteAfterDelay() {
+        // Don't schedule more than one unmute
+        if (this.muteTimeout) {
+            return;
+        }
+
+        // Wait a bit to unmute, there's a delay before the next song starts
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
             () => {
                 this.muteTimeout = 0;
 
-                if (this.muted && this.streams.length > 0) {
-                    this.streams.map(s => s.set_volume(this.volumeBeforeAds));
-                    this.streams.map(s => s.push_volume());
-                    this.volumeBeforeAds = NOT_MUTED;
+                // Always double-check before unmuting since this is delayed
+                if (this.shouldUnmute()) {
+                    this.unmute();
                 }
 
-                this.button.set_child(this.music_icon);
                 return GLib.SOURCE_REMOVE;
             });
+    }
+
+    unmute() {
+        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
+        this.streams.forEach(s => s.push_volume());
+
+        this.button.set_child(this.music_icon);
     }
 
     isAd() {
@@ -157,14 +168,19 @@ var AdBlocker = class AdBlocker {
         return blocklist.some((b) => trackId.startsWith(b));
     }
 
-    update() {
+    update(didVolumeChange = false) {
         if (!this.activated)
             return;
 
-        if (this.isAd()) {
+        if (this.shouldMute()) {
             this.mute();
-        } else {
-            this.unmute();
+        } else if (this.shouldUnmute()) {
+            if (didVolumeChange) {
+                // Don't delay unmuting if it's because of a volume change
+                this.unmute();
+            } else {
+                this.unmuteAfterDelay();
+            }
         }
     }
 
@@ -173,11 +189,13 @@ var AdBlocker = class AdBlocker {
         this.button.opacity = 255;
         this.reloadPlayer();
         this.watch();
+        this.connectStreamHandlers();
     }
 
     disable() {
         this.activated = false;
         this.button.opacity = 100;
+        this.disconnectStreamHandlers();
         if (this.playerId)
             this.player.disconnect(this.playerId);
         if (this.muteTimeout) {
@@ -205,6 +223,65 @@ var AdBlocker = class AdBlocker {
         if (this.playerWatchTimeoutId) {
             GLib.source_remove(this.playerWatchTimeoutId);
             this.playerWatchTimeoutId = 0;
+        }
+    }
+
+    connectStreamHandlers() {
+        this.streams.forEach(stream => this.connectStreamVolumeHandler(stream));
+
+        const mixer = Volume.getMixerControl();
+        this.streamAddedHandlerId = mixer.connect('stream-added', (control, streamId) => {
+            const stream = control.lookup_stream_id(streamId);
+            const streamName = stream.get_name();
+            if (streamName.toLowerCase() === 'spotify') {
+                // A new stream could be created during an ad so we should check right
+                // away whether it needs to be muted
+                this.update();
+                this.connectStreamVolumeHandler(stream);
+            }
+        });
+
+        this.streamRemovedHandlerId = mixer.connect('stream-removed', (control, streamId) => {
+            if (this.streamVolumeHandlers.has(streamId)) {
+                const stream = control.lookup_stream_id(streamId);
+                const handlerId = this.streamVolumeHandlers.get(streamId);
+                if (stream && handlerId) {
+                    stream.disconnect(handlerId);
+                }
+                this.streamVolumeHandlers.delete(streamId);
+            }
+        });
+    }
+
+    connectStreamVolumeHandler(stream) {
+        const streamId = stream.get_id();
+        if (!this.streamVolumeHandlers.has(streamId)) {
+            const handlerId = stream.connect('notify::volume', stream => {
+                // Spotify may change the stream volume so we should check whether the
+                // stream volume needs to be muted or unmuted if this happens
+                this.update();
+            });
+            this.streamVolumeHandlers.set(streamId, handlerId);
+        }
+    }
+
+    disconnectStreamHandlers() {
+        const mixer = Volume.getMixerControl();
+        for (const [streamId, handlerId] of this.streamVolumeHandlers.entries()) {
+            const stream = mixer.lookup_stream_id(Number(streamId));
+            if (stream && handlerId) {
+                stream.disconnect(handlerId);
+            }
+        }
+        this.streamVolumeHandlers.clear();
+
+        if (this.streamAddedHandlerId) {
+            mixer.disconnect(this.streamAddedHandlerId);
+            this.streamAddedHandlerId = 0;
+        }
+        if (this.streamRemovedHandlerId) {
+            mixer.disconnect(this.streamRemovedHandlerId);
+            this.streamRemovedHandlerId = 0;
         }
     }
 }

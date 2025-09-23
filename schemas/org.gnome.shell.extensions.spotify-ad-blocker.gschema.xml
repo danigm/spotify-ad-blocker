@@ -11,9 +11,5 @@
     <key name="unmute-delay" type="i">
       <default>500</default>
     </key>
-    <!-- Used internally to persist volume before ads. Not intended to be modified by user. -->
-    <key name="volume-before-ads" type="i">
-      <default>-1</default>
-    </key>
   </schema>
 </schemalist>
