@@ -12,10 +12,10 @@ let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
 const WATCH_TIMEOUT = 3000;
 
-const MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
-
 var AdBlocker = class AdBlocker {
     constructor(settings) {
+        this.MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
+
         // GNOME 48
         if (Mpris.MediaSection == undefined) {
             this.media = new Mpris.MprisSource();
@@ -91,7 +91,7 @@ var AdBlocker = class AdBlocker {
 
         // Subtract 1 from MAX_STREAM_VOLUME because it's 65536 but for some reason
         // sometimes the stream volume is 65535 when set to full volume
-        return this.streams.every(s => s.get_volume() < MAX_STREAM_VOLUME - 1);
+        return this.streams.every(s => s.get_volume() < this.MAX_STREAM_VOLUME - 1);
     }
 
     get streams() {
@@ -116,7 +116,7 @@ var AdBlocker = class AdBlocker {
             this.muteTimeout = 0;
         }
 
-        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
+        this.streams.forEach(s => s.set_volume(this.MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
         // This needs to be called after changing the volume for it to take effect
         this.streams.forEach(s => s.push_volume());
 
@@ -148,7 +148,7 @@ var AdBlocker = class AdBlocker {
     }
 
     unmute() {
-        this.streams.forEach(s => s.set_volume(MAX_STREAM_VOLUME));
+        this.streams.forEach(s => s.set_volume(this.MAX_STREAM_VOLUME));
         this.streams.forEach(s => s.push_volume());
 
         this.button.set_child(this.music_icon);
