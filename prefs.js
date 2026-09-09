@@ -64,5 +64,21 @@ export default class SpoitifyAdBlockPreferences extends ExtensionPreferences {
 
         unmuteDelayRow.add_suffix(unmuteDelayInput);
         unmuteDelayRow.set_activatable_widget(unmuteDelayInput);
+
+        // Debug mode
+        const debugModeRow = new Adw.ActionRow({
+            title: 'Activate debug mode',
+            subtitle: 'Debug mode for development and testing',
+        });
+        prefsGroup.add(debugModeRow);
+        const debugModeSwitch = new Gtk.Switch({
+            active: settings.get_boolean('debug-mode'),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind('debug-mode', debugModeSwitch, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+
+        debugModeRow.add_suffix(debugModeSwitch);
+        debugModeRow.set_activatable_widget(debugModeSwitch);
     }
 }

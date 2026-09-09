@@ -2,19 +2,20 @@ import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gvc from 'gi://Gvc';
+import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Mpris from 'resource:///org/gnome/shell/ui/mpris.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 
-let adBlocker;
 const MPRIS_PLAYER = 'org.mpris.MediaPlayer2.spotify';
 const WATCH_TIMEOUT = 3000;
 
 var AdBlocker = class AdBlocker {
     constructor(settings) {
         this.MAX_STREAM_VOLUME = Volume.getMixerControl().get_vol_max_norm();
+        this._mpris = Mpris;
 
         // GNOME 48
         if (Mpris.MediaSection == undefined) {
@@ -50,6 +51,7 @@ var AdBlocker = class AdBlocker {
         this.button.set_child(this.music_icon);
         this.button.connect('button-press-event', this.toggle.bind(this));
 
+        this.remuteTimeout = 0;
         this.muteTimeout = 0;
         this.enable();
 
@@ -60,6 +62,51 @@ var AdBlocker = class AdBlocker {
                 Main.panel._rightBox.remove_child(this.button);
             }
         });
+
+        this.debugBox = null;
+        this.debugMode = this.settings.get_boolean('debug-mode');
+        this.settings.connect('changed::debug-mode', () => {
+            this.debugMode = this.settings.get_boolean('debug-mode');
+            this.showDebugControls();
+        });
+
+        if (this.debugMode) {
+            this.showDebugControls();
+        }
+    }
+
+    showDebugControls() {
+        if (this.debugMode) {
+            this.debugBox = this.createDebugBox();
+            Main.panel._rightBox.insert_child_at_index(this.debugBox, 0);
+        } else {
+            Main.panel._rightBox.remove_child(this.debugBox);
+            this.debugBox = null;
+        }
+    }
+
+    createDebugBox() {
+        const debugBox = new St.BoxLayout({name: 'debugBox'});
+
+        this.debugMute = new St.Bin({ style_class: 'panel-button', reactive: true, can_focus: true, track_hover: true });
+        this.debugUnmute = new St.Bin({ style_class: 'panel-button', reactive: true, can_focus: true, track_hover: true });
+        this.debugMute.set_child(new St.Icon({ icon_name: 'audio-volume-muted-symbolic', style_class: 'system-status-icon' }));
+        this.debugUnmute.set_child(new St.Icon({ icon_name: 'audio-volume-high-symbolic', style_class: 'system-status-icon' }));
+        this.debugMute.connect('button-press-event', this.mute.bind(this));
+        this.debugUnmute.connect('button-press-event', this.unmute.bind(this));
+
+
+        this.debugTrackId = new St.Label({
+            text: "track-id",
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        debugBox.insert_child_at_index(this.debugMute, 0);
+        debugBox.insert_child_at_index(this.debugUnmute, 0);
+        debugBox.insert_child_at_index(this.debugTrackId, 0);
+
+        return debugBox;
     }
 
     reloadPlayer() {
@@ -84,16 +131,6 @@ var AdBlocker = class AdBlocker {
         }
     }
 
-    get muted() {
-        if (this.streams.length === 0) {
-            return false;
-        }
-
-        // Subtract 1 from MAX_STREAM_VOLUME because it's 65536 but for some reason
-        // sometimes the stream volume is 65535 when set to full volume
-        return this.streams.every(s => s.get_volume() < this.MAX_STREAM_VOLUME - 1);
-    }
-
     get streams() {
         let mixer = Volume.getMixerControl();
 
@@ -106,8 +143,14 @@ var AdBlocker = class AdBlocker {
         return [];
     }
 
-    shouldMute() {
-        return this.isAd() && !this.muted;
+    muteStreams() {
+        if (this.debugMode) {
+            console.log('Debug: muteStreams called');
+        }
+
+        this.streams.forEach(s => s.set_volume(this.MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
+        // This needs to be called after changing the volume for it to take effect
+        this.streams.forEach(s => s.push_volume());
     }
 
     mute() {
@@ -116,15 +159,27 @@ var AdBlocker = class AdBlocker {
             this.muteTimeout = 0;
         }
 
-        this.streams.forEach(s => s.set_volume(this.MAX_STREAM_VOLUME * this.settings.get_int('ad-volume-percentage') / 100));
-        // This needs to be called after changing the volume for it to take effect
-        this.streams.forEach(s => s.push_volume());
+        if (this.debugMode) {
+            console.log('Debug: mute called');
+        }
 
+        this.muteStreams();
         this.button.set_child(this.ad_icon);
-    }
 
-    shouldUnmute() {
-        return !this.isAd() && this.muted;
+        // Remute while isAd
+        if (this.remuteTimeout) {
+            GLib.source_remove(this.remuteTimeout);
+            this.remuteTimeout = 0;
+        }
+        this.remuteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200,
+            () => {
+                if (this.isAd()) {
+                    this.muteStreams();
+                    return GLib.SOURCE_CONTINUE;
+                }
+                this.remuteTimeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     unmuteAfterDelay() {
@@ -137,17 +192,21 @@ var AdBlocker = class AdBlocker {
         this.muteTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.settings.get_int('unmute-delay'),
             () => {
                 this.muteTimeout = 0;
-
-                // Always double-check before unmuting since this is delayed
-                if (this.shouldUnmute()) {
-                    this.unmute();
-                }
-
+                this.unmute();
                 return GLib.SOURCE_REMOVE;
             });
     }
 
     unmute() {
+        if (this.debugMode) {
+            console.log('Debug: unmute called');
+        }
+
+        if (this.remuteTimeout) {
+            GLib.source_remove(this.remuteTimeout);
+            this.remuteTimeout = 0;
+        }
+
         this.streams.forEach(s => s.set_volume(this.MAX_STREAM_VOLUME));
         this.streams.forEach(s => s.push_volume());
 
@@ -160,27 +219,39 @@ var AdBlocker = class AdBlocker {
             '/com/spotify/ad/',
         ];
 
+        if (!this.player || !this.player._playerProxy) {
+            this.reloadPlayer();
+            return;
+        }
+
         let trackId = this.player._playerProxy.Metadata['mpris:trackid'];
         if (!trackId)
             return false;
 
         trackId = trackId.unpack();
+
+        if (this.debugMode) {
+            console.log('Debug: isAd called with blocklist: ' + blocklist);
+            console.log('Debug: isAd called with trackId: ' + trackId);
+            this.debugTrackId.set_text(trackId);
+        }
+
         return blocklist.some((b) => trackId.startsWith(b));
     }
 
-    update(didVolumeChange = false) {
+    update() {
         if (!this.activated)
             return;
 
-        if (this.shouldMute()) {
+        if (this.debugMode) {
+            console.log('Debug: update called');
+        }
+
+        const isad = this.isAd();
+        if (isad) {
             this.mute();
-        } else if (this.shouldUnmute()) {
-            if (didVolumeChange) {
-                // Don't delay unmuting if it's because of a volume change
-                this.unmute();
-            } else {
-                this.unmuteAfterDelay();
-            }
+        } else {
+            this.unmuteAfterDelay();
         }
     }
 
@@ -189,13 +260,11 @@ var AdBlocker = class AdBlocker {
         this.button.opacity = 255;
         this.reloadPlayer();
         this.watch();
-        this.connectStreamHandlers();
     }
 
     disable() {
         this.activated = false;
         this.button.opacity = 100;
-        this.disconnectStreamHandlers();
         if (this.playerId)
             this.player.disconnect(this.playerId);
         if (this.muteTimeout) {
@@ -225,80 +294,23 @@ var AdBlocker = class AdBlocker {
             this.playerWatchTimeoutId = 0;
         }
     }
-
-    connectStreamHandlers() {
-        this.streams.forEach(stream => this.connectStreamVolumeHandler(stream));
-
-        const mixer = Volume.getMixerControl();
-        this.streamAddedHandlerId = mixer.connect('stream-added', (control, streamId) => {
-            const stream = control.lookup_stream_id(streamId);
-            const streamName = stream.get_name();
-            if (streamName.toLowerCase() === 'spotify') {
-                // A new stream could be created during an ad so we should check right
-                // away whether it needs to be muted
-                this.update();
-                this.connectStreamVolumeHandler(stream);
-            }
-        });
-
-        this.streamRemovedHandlerId = mixer.connect('stream-removed', (control, streamId) => {
-            if (this.streamVolumeHandlers.has(streamId)) {
-                const stream = control.lookup_stream_id(streamId);
-                const handlerId = this.streamVolumeHandlers.get(streamId);
-                if (stream && handlerId) {
-                    stream.disconnect(handlerId);
-                }
-                this.streamVolumeHandlers.delete(streamId);
-            }
-        });
-    }
-
-    connectStreamVolumeHandler(stream) {
-        const streamId = stream.get_id();
-        if (!this.streamVolumeHandlers.has(streamId)) {
-            const handlerId = stream.connect('notify::volume', stream => {
-                // Spotify may change the stream volume so we should check whether the
-                // stream volume needs to be muted or unmuted if this happens
-                this.update();
-            });
-            this.streamVolumeHandlers.set(streamId, handlerId);
-        }
-    }
-
-    disconnectStreamHandlers() {
-        const mixer = Volume.getMixerControl();
-        for (const [streamId, handlerId] of this.streamVolumeHandlers.entries()) {
-            const stream = mixer.lookup_stream_id(Number(streamId));
-            if (stream && handlerId) {
-                stream.disconnect(handlerId);
-            }
-        }
-        this.streamVolumeHandlers.clear();
-
-        if (this.streamAddedHandlerId) {
-            mixer.disconnect(this.streamAddedHandlerId);
-            this.streamAddedHandlerId = 0;
-        }
-        if (this.streamRemovedHandlerId) {
-            mixer.disconnect(this.streamRemovedHandlerId);
-            this.streamRemovedHandlerId = 0;
-        }
-    }
 }
 
 
 export default class SpoitifyAdBlockExtension extends Extension {
+    adBlocker = null;
+
     enable() {
         let settings = this.getSettings();
-        adBlocker = new AdBlocker(settings);
-        if (adBlocker.settings.get_boolean('show-indicator')) {
-            Main.panel._rightBox.insert_child_at_index(adBlocker.button, 0);
+        this.adBlocker = new AdBlocker(settings);
+        if (this.adBlocker.settings.get_boolean('show-indicator')) {
+            Main.panel._rightBox.insert_child_at_index(this.adBlocker.button, 0);
         }
     }
 
     disable() {
-        adBlocker.disable();
-        Main.panel._rightBox.remove_child(adBlocker.button);
-        adBlocker = null;
+        this.adBlocker.disable();
+        Main.panel._rightBox.remove_child(this.adBlocker.button);
+        this.adBlocker = null;
     }
 }

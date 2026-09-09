@@ -11,5 +11,8 @@
     <key name="unmute-delay" type="i">
       <default>500</default>
     </key>
+    <key name="debug-mode" type="b">
+      <default>false</default>
+    </key>
   </schema>
 </schemalist>
